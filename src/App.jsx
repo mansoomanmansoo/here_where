@@ -71,15 +71,18 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [gpsLoading, setGpsLoading] = useState(false)
   const [mapError, setMapError] = useState('')
+  const [onlineCount, setOnlineCount] = useState(0)
+  const [roomCount, setRoomCount] = useState(0)
 
   const identity = useMemo(() => getIdentity(), [])
   const { nick: myNick, color: myColor } = identity
 
-  const mapContainerRef = useRef(null)
-  const kakaoMapRef     = useRef(null)
-  const overlaysRef     = useRef([])
-  const realtimeRef     = useRef(null)
-  const endRef          = useRef(null)
+  const mapContainerRef   = useRef(null)
+  const kakaoMapRef       = useRef(null)
+  const overlaysRef       = useRef([])
+  const realtimeRef       = useRef(null)
+  const globalPresenceRef = useRef(null)
+  const endRef            = useRef(null)
 
   // ── Kakao Maps SDK 동적 로드 ──
   useEffect(() => {
@@ -131,9 +134,12 @@ export default function App() {
   // ── 채팅방 Realtime 구독 ──
   useEffect(() => {
     if (!activePlace) return
+    setRoomCount(0)
     loadChatData(activePlace.id)
-    realtimeRef.current = supabase
-      .channel(`room:${activePlace.id}`)
+    const ch = supabase.channel(`room:${activePlace.id}`)
+    ch.on('presence', { event: 'sync' }, () => {
+        setRoomCount(Object.keys(ch.presenceState()).length)
+      })
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `place_id=eq.${activePlace.id}` },
         ({ new: msg }) => {
@@ -145,8 +151,11 @@ export default function App() {
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'vibe_votes', filter: `place_id=eq.${activePlace.id}` },
         ({ new: v }) => setVibeVotes(p => ({ ...p, [v.label]: (p[v.label] || 0) + 1 })))
-      .subscribe()
-    return () => realtimeRef.current?.unsubscribe()
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') await ch.track({ nick: myNick })
+      })
+    realtimeRef.current = ch
+    return () => ch.unsubscribe()
   }, [activePlace, myNick])
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
@@ -160,6 +169,19 @@ export default function App() {
     const u = () => setCooldownLeft(Math.max(0, Math.ceil((RATE_LIMIT_MS - (Date.now() - lastSentAt)) / 1000)))
     u(); const t = setInterval(u, 500); return () => clearInterval(t)
   }, [lastSentAt])
+
+  // ── 전체 접속자 Presence ──
+  useEffect(() => {
+    const ch = supabase.channel('global-presence')
+    ch.on('presence', { event: 'sync' }, () => {
+      setOnlineCount(Object.keys(ch.presenceState()).length)
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') await ch.track({ nick: myNick })
+    })
+    globalPresenceRef.current = ch
+    return () => ch.unsubscribe()
+  }, [myNick])
 
   // ── GPS 위치 찾기 ──
   function locateUser() {
@@ -348,6 +370,12 @@ export default function App() {
         {/* 상단 오버레이 */}
         <div className="map-top">
           <div className="map-logo">here.</div>
+          {onlineCount > 0 && (
+            <div className="online-badge">
+              <span className="online-dot" />
+              {onlineCount}명 접속 중
+            </div>
+          )}
           <button className="map-gps-btn" onClick={locateUser} disabled={gpsLoading}>
             {gpsLoading ? '⟳' : '📍'}
           </button>
@@ -441,6 +469,12 @@ export default function App() {
                 <span className="eyebrow">{catInfo.emoji} {activePlace.categoryName}</span>
                 <h2>{activePlace.name}</h2>
                 <p style={{ fontSize: 12, color: '#9a9ea9', margin: 0 }}>{activePlace.address}</p>
+                {roomCount > 0 && (
+                  <div className="room-online">
+                    <span className="online-dot" />
+                    지금 {roomCount}명 여기 있어요
+                  </div>
+                )}
               </div>
 
               {/* 분위기 투표 */}
