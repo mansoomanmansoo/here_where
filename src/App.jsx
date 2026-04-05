@@ -70,6 +70,7 @@ export default function App() {
   const [myVibe, setMyVibe] = useState('')
   const [loading, setLoading] = useState(false)
   const [gpsLoading, setGpsLoading] = useState(false)
+  const [mapError, setMapError] = useState('')
 
   const identity = useMemo(() => getIdentity(), [])
   const { nick: myNick, color: myColor } = identity
@@ -83,9 +84,25 @@ export default function App() {
   // ── Kakao Maps SDK 동적 로드 ──
   useEffect(() => {
     if (window.kakao?.maps?.Map) { setKakaoReady(true); return }
+    const key = import.meta.env.VITE_KAKAO_JS_KEY
+    if (!key) { setMapError('카카오 API 키가 없습니다.'); return }
     const script = document.createElement('script')
-    script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${import.meta.env.VITE_KAKAO_JS_KEY}&libraries=services&autoload=false`
-    script.onload = () => window.kakao.maps.load(() => setKakaoReady(true))
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&libraries=services&autoload=false`
+    script.onload = () => {
+      try {
+        window.kakao.maps.load(() => {
+          console.log('Kakao Maps loaded OK')
+          setKakaoReady(true)
+        })
+      } catch (e) {
+        console.error('kakao.maps.load error:', e)
+        setMapError('지도를 초기화하지 못했어요: ' + e.message)
+      }
+    }
+    script.onerror = (e) => {
+      console.error('Kakao script load error:', e)
+      setMapError('카카오 지도 스크립트를 불러오지 못했어요. 도메인 등록을 확인하세요.')
+    }
     document.head.appendChild(script)
   }, [])
 
@@ -337,7 +354,13 @@ export default function App() {
         </div>
 
         {/* 로딩/빈 상태 */}
-        {nearbyPlaces.length === 0 && kakaoReady && !gpsLoading && (
+        {mapError && (
+          <div className="map-hint map-hint--error">⚠️ {mapError}</div>
+        )}
+        {!kakaoReady && !mapError && (
+          <div className="map-hint">지도 불러오는 중...</div>
+        )}
+        {nearbyPlaces.length === 0 && kakaoReady && !gpsLoading && !mapError && (
           <div className="map-hint">📍 위치 버튼을 눌러 주변 장소를 불러오세요</div>
         )}
         {gpsLoading && (

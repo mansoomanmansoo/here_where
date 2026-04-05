@@ -48,6 +48,8 @@ html, body, #root { margin: 0; height: 100%; }
   white-space: nowrap; z-index: 10; backdrop-filter: blur(8px);
 }
 
+.map-hint--error { border-color: rgba(255,100,100,0.4); color: #ff8a8a; }
+
 /* Nick badge */
 .map-nick-badge {
   position: absolute; bottom: 24px; left: 16px; z-index: 10;
