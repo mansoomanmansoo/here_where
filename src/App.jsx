@@ -550,20 +550,24 @@ export default function App() {
                 </p>
               )}
 
-              <div className="message-list">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`message-card ${msg.nick === myNick ? 'mine' : ''}`}>
-                    <div className="message-head">
-                      <div className="author-line">
-                        <span className="dot" style={{ background: msg.color }} />
-                        {msg.nick}
-                        {msg.nick === myNick && <span style={{ fontSize: 11, color: '#ff8a8a', marginLeft: 4 }}>나</span>}
+              <div className="chat-messages">
+                {messages.map((msg) => {
+                  const isMe = msg.nick === myNick
+                  return (
+                    <div key={msg.id} className={`chat-row ${isMe ? 'chat-row--me' : 'chat-row--other'}`}>
+                      {!isMe && (
+                        <span className="chat-avatar" style={{ background: msg.color }} />
+                      )}
+                      <div className="chat-bubble-wrap">
+                        {!isMe && <span className="chat-nick">{msg.nick}</span>}
+                        <div className={`chat-bubble ${isMe ? 'chat-bubble--me' : 'chat-bubble--other'}`}>
+                          {msg.text}
+                        </div>
+                        <span className="chat-time">{relativeTime(msg.created_at)}</span>
                       </div>
-                      <small>{relativeTime(msg.created_at)}</small>
                     </div>
-                    <div className="message-body">{msg.text}</div>
-                  </div>
-                ))}
+                  )
+                })}
                 <div ref={endRef} />
               </div>
 
