@@ -10,31 +10,20 @@ export default async function handler(req, res) {
     drwNo = Math.floor((Date.now() - new Date('2002-12-07').getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
   }
 
-  // 최신 회차 시도, 실패하면 전 회차
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const r = await fetch(
-        `https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo=${drwNo - attempt}`,
-        { headers: { 'User-Agent': 'Mozilla/5.0' } }
-      )
-      const d = await r.json()
-      if (d.returnValue !== 'success') continue
-
-      return res.status(200).json({
-        drwNo: d.drwNo,
-        drwNoDate: d.drwNoDate,
-        numbers: [d.drwtNo1, d.drwtNo2, d.drwtNo3, d.drwtNo4, d.drwtNo5, d.drwtNo6],
-        bonus: d.bnusNo,
-        totSellAmt: d.totSellamnt,
-        first: {
-          winners: d.firstPrzwnerCo,
-          prize: d.firstWinamnt,
-        },
-      })
-    } catch (e) {
-      continue
-    }
+  const url = `https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo=${drwNo}`
+  try {
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.dhlottery.co.kr/',
+        'Accept': 'application/json, text/javascript, */*',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+      }
+    })
+    const text = await res.status(200) // dummy
+    const body = await r.text()
+    return res.status(200).json({ debug: { status: r.status, drwNo, body: body.slice(0, 300) } })
+  } catch (e) {
+    return res.status(200).json({ debug: { error: e.message, drwNo } })
   }
-
-  return res.status(500).json({ error: '당첨 정보를 불러오지 못했어요.' })
 }
