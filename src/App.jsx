@@ -474,15 +474,17 @@ export default function App() {
 
   useEffect(() => { globalEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [globalMessages])
 
+  const lastGlobalTextRef = useRef('')
+
   async function sendGlobal() {
     const trimmed = globalInput.trim().slice(0, MAX_MSG_LEN)
     if (!trimmed) return
     if (BANNED_WORDS.some(w => trimmed.includes(w))) { setNotice('금칙어가 포함되어 있어요.'); return }
-    if (Date.now() - lastSentAt < RATE_LIMIT_MS) { setNotice(`${cooldownLeft}초 후 전송 가능해요.`); return }
+    if (trimmed === lastGlobalTextRef.current) { setNotice('같은 내용을 반복할 수 없어요.'); return }
     const msg = { place_id: 'global::all', nick: myNick, color: myColor, text: trimmed, type: 'message' }
     setGlobalMessages(p => [...p, { ...msg, id: 'tmp-' + Date.now(), created_at: new Date().toISOString() }])
     setGlobalInput('')
-    setLastSentAt(Date.now())
+    lastGlobalTextRef.current = trimmed
     const { error } = await supabase.from('messages').insert(msg)
     if (error) setGlobalMessages(p => p.filter(m => !String(m.id).startsWith('tmp-')))
   }
@@ -803,9 +805,8 @@ export default function App() {
                 <div className="input-footer">
                   <small style={{ color: '#6b6f7a' }}>
                     {globalInput.length}/{MAX_MSG_LEN}
-                    {cooldownLeft > 0 && <span style={{ color: '#ff8a8a', marginLeft: 6 }}>· {cooldownLeft}초</span>}
                   </small>
-                  <button className="primary-btn" onClick={sendGlobal} disabled={cooldownLeft > 0 || !globalInput.trim()}>
+                  <button className="primary-btn" onClick={sendGlobal} disabled={!globalInput.trim()}>
                     보내기
                   </button>
                 </div>
