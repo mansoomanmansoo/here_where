@@ -60,6 +60,13 @@ export default function App() {
   const [showLotto, setShowLotto] = useState(false)
   const [lottoResult, setLottoResult] = useState(null)
   const [lottoLoading, setLottoLoading] = useState(false)
+  const [showGlobalChat, setShowGlobalChat] = useState(false)
+  const [globalMessages, setGlobalMessages] = useState([])
+  const [globalInput, setGlobalInput] = useState('')
+  const [globalLoading, setGlobalLoading] = useState(false)
+  const [showGenerator, setShowGenerator] = useState(false)
+  const [genNumbers, setGenNumbers] = useState([])
+  const [genAnimating, setGenAnimating] = useState(false)
   const [selectedPlace, setSelectedPlace] = useState(null)
   const [activePlace, setActivePlace] = useState(null)
   const [messages, setMessages] = useState([])
@@ -116,29 +123,43 @@ export default function App() {
     document.head.appendChild(script)
   }, [])
 
-  // ── 이번 회차 당첨점 로드 + 지오코딩 ──
+  // ── 이번 회차 당첨점: fetch는 즉시, 지오코딩은 kakaoReady 후 ──
+  const winnersRawRef = useRef(null)
+
+  // fetch는 마운트 즉시 시작
   useEffect(() => {
-    if (!kakaoReady) return
     fetch('/api/lotto-winners')
       .then(r => r.json())
       .then(({ drwNo, stores }) => {
         if (!stores?.length) return
         setThisWeekDrwNo(drwNo)
-        const geocoder = new window.kakao.maps.services.Geocoder()
-        const results = []
-        let done = 0
-        stores.forEach(({ name, addr }) => {
-          geocoder.addressSearch(addr, (data, status) => {
-            if (status === window.kakao.maps.services.Status.OK && data[0]) {
-              results.push({ name, addr, lat: parseFloat(data[0].y), lng: parseFloat(data[0].x) })
-            }
-            done++
-            if (done === stores.length) setThisWeekWinners([...results])
-          })
-        })
+        winnersRawRef.current = stores
+        // kakaoReady면 바로 지오코딩
+        if (window.kakao?.maps?.services?.Geocoder) geocodeWinners(stores)
       })
       .catch(() => {})
+  }, [])
+
+  // kakaoReady 됐을 때 데이터 이미 있으면 바로 지오코딩
+  useEffect(() => {
+    if (!kakaoReady || !winnersRawRef.current) return
+    geocodeWinners(winnersRawRef.current)
   }, [kakaoReady])
+
+  function geocodeWinners(stores) {
+    const geocoder = new window.kakao.maps.services.Geocoder()
+    const results = []
+    let done = 0
+    stores.forEach(({ name, addr }) => {
+      geocoder.addressSearch(addr, (data, status) => {
+        if (status === window.kakao.maps.services.Status.OK && data[0]) {
+          results.push({ name, addr, lat: parseFloat(data[0].y), lng: parseFloat(data[0].x) })
+        }
+        done++
+        if (done === stores.length) setThisWeekWinners([...results])
+      })
+    })
+  }
 
   // ── 지도 초기화 ──
   useEffect(() => {
@@ -418,6 +439,79 @@ export default function App() {
     if (error) { setMyVibe(''); setVibeVotes(p => ({ ...p, [label]: Math.max(0, (p[label] || 1) - 1) })) }
   }
 
+  // ── 전체 채팅 ──
+  const globalChatRef = useRef(null)
+  const globalEndRef = useRef(null)
+
+  async function openGlobalChat() {
+    setShowGlobalChat(true)
+    if (globalMessages.length > 0) return
+    setGlobalLoading(true)
+    try {
+      const { data } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('place_id', 'global::all')
+        .gt('created_at', ttlDate())
+        .order('created_at', { ascending: true })
+      setGlobalMessages(data || [])
+    } catch {}
+    finally { setGlobalLoading(false) }
+  }
+
+  useEffect(() => {
+    const ch = supabase.channel('global-chat')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: 'place_id=eq.global::all' },
+        ({ new: msg }) => {
+          if (new Date(msg.created_at).getTime() < Date.now() - TTL_MS) return
+          if (msg.nick === myNick) return
+          setGlobalMessages(p => [...p, msg])
+        })
+      .subscribe()
+    return () => ch.unsubscribe()
+  }, [myNick])
+
+  useEffect(() => { globalEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [globalMessages])
+
+  async function sendGlobal() {
+    const trimmed = globalInput.trim().slice(0, MAX_MSG_LEN)
+    if (!trimmed) return
+    if (BANNED_WORDS.some(w => trimmed.includes(w))) { setNotice('금칙어가 포함되어 있어요.'); return }
+    if (Date.now() - lastSentAt < RATE_LIMIT_MS) { setNotice(`${cooldownLeft}초 후 전송 가능해요.`); return }
+    const msg = { place_id: 'global::all', nick: myNick, color: myColor, text: trimmed, type: 'message' }
+    setGlobalMessages(p => [...p, { ...msg, id: 'tmp-' + Date.now(), created_at: new Date().toISOString() }])
+    setGlobalInput('')
+    setLastSentAt(Date.now())
+    const { error } = await supabase.from('messages').insert(msg)
+    if (error) setGlobalMessages(p => p.filter(m => !String(m.id).startsWith('tmp-')))
+  }
+
+  // ── 번호 생성기 ──
+  function generateNumbers() {
+    setGenAnimating(true)
+    setGenNumbers([])
+    let count = 0
+    const interval = setInterval(() => {
+      const pool = Array.from({ length: 45 }, (_, i) => i + 1)
+      const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, 6).sort((a, b) => a - b)
+      setGenNumbers(shuffled)
+      count++
+      if (count >= 8) {
+        clearInterval(interval)
+        setGenAnimating(false)
+      }
+    }, 80)
+  }
+
+  const ballColor = (n) => {
+    if (n <= 10) return '#fbc400'
+    if (n <= 20) return '#69c8f2'
+    if (n <= 30) return '#ff7272'
+    if (n <= 40) return '#aaaaaa'
+    return '#b0d840'
+  }
+
   async function openLotto() {
     setShowLotto(true)
     if (lottoResult) return
@@ -458,13 +552,15 @@ export default function App() {
 
         {/* 상단 오버레이 */}
         <div className="map-top">
-          <div className="map-logo">luck<span className="logo-dot">.</span></div>
+          <div className="map-logo">goodluck<span className="logo-dot">.</span></div>
           <div className="map-top-right">
             {onlineCount > 0 && (
               <div className="online-badge">
                 <span className="online-dot" />{onlineCount}명 접속 중
               </div>
             )}
+            <button className="map-icon-btn" onClick={() => { setShowGenerator(true); if (!genNumbers.length) generateNumbers() }} title="번호 생성기">🎰</button>
+            <button className="map-icon-btn" onClick={openGlobalChat} title="전체 대화">💬</button>
             <button className="map-icon-btn" onClick={openLotto} title="이번 주 당첨번호">🎱</button>
             <button className="map-icon-btn" onClick={() => setShowRanking(true)} title="전국 명당 랭킹">🏆</button>
             <button className="map-icon-btn" onClick={locateUser} disabled={gpsLoading}>
@@ -596,13 +692,6 @@ export default function App() {
                   <p style={{ textAlign: 'center', color: '#9296a3', padding: '20px 0' }}>불러오는 중...</p>
                 )}
                 {!lottoLoading && lottoResult && (() => {
-                  const ballColor = (n) => {
-                    if (n <= 10) return '#fbc400'
-                    if (n <= 20) return '#69c8f2'
-                    if (n <= 30) return '#ff7272'
-                    if (n <= 40) return '#aaaaaa'
-                    return '#b0d840'
-                  }
                   return (
                     <>
                       {/* 번호 볼 */}
@@ -657,6 +746,125 @@ export default function App() {
                 {!lottoLoading && !lottoResult && (
                   <p style={{ textAlign: 'center', color: '#ff8a8a' }}>정보를 불러오지 못했어요.</p>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 전체 자유대화창 */}
+        {showGlobalChat && (
+          <div className="ranking-overlay" onClick={e => e.target === e.currentTarget && setShowGlobalChat(false)}>
+            <div className="ranking-panel" style={{ display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+              <div className="ranking-header">
+                <div>
+                  <h3 style={{ margin: 0 }}>💬 전체 자유대화</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9296a3' }}>전국 luck. 사용자와 대화해보세요</p>
+                </div>
+                <button className="ranking-close" onClick={() => setShowGlobalChat(false)}>✕</button>
+              </div>
+
+              <div className="chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', minHeight: 0 }}>
+                {globalLoading && (
+                  <p style={{ textAlign: 'center', color: '#9296a3', padding: '20px 0' }}>불러오는 중...</p>
+                )}
+                {!globalLoading && globalMessages.length === 0 && (
+                  <p style={{ textAlign: 'center', color: '#6b6f7a', padding: '20px 0', fontSize: 14 }}>
+                    아직 아무도 없어요.<br />첫 번째로 대화를 시작해보세요!
+                  </p>
+                )}
+                {globalMessages.map(msg => {
+                  const isMe = msg.nick === myNick
+                  return (
+                    <div key={msg.id} className={`chat-row ${isMe ? 'chat-row--me' : 'chat-row--other'}`}>
+                      {!isMe && <span className="chat-avatar" style={{ background: msg.color }} />}
+                      <div className="chat-bubble-wrap">
+                        {!isMe && <span className="chat-nick">{msg.nick}</span>}
+                        <div className={`chat-bubble ${isMe ? 'chat-bubble--me' : 'chat-bubble--other'}`}>
+                          {msg.text}
+                        </div>
+                        <span className="chat-time">{relativeTime(msg.created_at)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+                <div ref={globalEndRef} />
+              </div>
+
+              <div className="input-area" style={{ borderTop: '1px solid #2a2d35', padding: '10px 16px' }}>
+                <textarea
+                  value={globalInput}
+                  onChange={e => setGlobalInput(e.target.value)}
+                  placeholder="모두에게 한마디 남겨보세요."
+                  maxLength={MAX_MSG_LEN}
+                  rows={2}
+                  style={{ width: '100%', background: '#1a1d23', border: '1px solid #2e3138', borderRadius: 10, color: '#f4f4f5', padding: '8px 12px', fontSize: 14, resize: 'none', boxSizing: 'border-box' }}
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendGlobal() } }}
+                />
+                <div className="input-footer">
+                  <small style={{ color: '#6b6f7a' }}>
+                    {globalInput.length}/{MAX_MSG_LEN}
+                    {cooldownLeft > 0 && <span style={{ color: '#ff8a8a', marginLeft: 6 }}>· {cooldownLeft}초</span>}
+                  </small>
+                  <button className="primary-btn" onClick={sendGlobal} disabled={cooldownLeft > 0 || !globalInput.trim()}>
+                    보내기
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 번호 생성기 */}
+        {showGenerator && (
+          <div className="ranking-overlay" onClick={e => e.target === e.currentTarget && setShowGenerator(false)}>
+            <div className="ranking-panel">
+              <div className="ranking-header">
+                <h3>🎰 번호 생성기</h3>
+                <button className="ranking-close" onClick={() => setShowGenerator(false)}>✕</button>
+              </div>
+
+              <div style={{ padding: '24px 20px 32px', textAlign: 'center' }}>
+                <div className="lotto-balls" style={{ justifyContent: 'center', marginBottom: 24, minHeight: 52 }}>
+                  {genNumbers.map((n, i) => (
+                    <span key={i} className={`lotto-ball${genAnimating ? ' lotto-ball--spin' : ''}`} style={{ background: ballColor(n) }}>{n}</span>
+                  ))}
+                  {genNumbers.length === 0 && !genAnimating && (
+                    <span style={{ color: '#6b6f7a', fontSize: 14 }}>번호를 생성해보세요</span>
+                  )}
+                </div>
+
+                {genNumbers.length === 6 && !genAnimating && (
+                  <p style={{ fontSize: 12, color: '#9296a3', marginBottom: 20 }}>
+                    이 번호로 한 번 도전해보세요 🍀
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                  <button
+                    className="primary-btn"
+                    onClick={generateNumbers}
+                    disabled={genAnimating}
+                    style={{ minWidth: 120 }}
+                  >
+                    {genAnimating ? '생성 중...' : '번호 생성'}
+                  </button>
+                  {genNumbers.length === 6 && !genAnimating && (
+                    <button
+                      className="primary-btn"
+                      style={{ minWidth: 80, background: 'rgba(255,215,0,0.15)', color: '#ffd700', border: '1px solid rgba(255,215,0,0.3)' }}
+                      onClick={() => {
+                        navigator.clipboard?.writeText(genNumbers.join(', ')).catch(() => {})
+                        setNotice('번호를 복사했어요!')
+                      }}
+                    >
+                      복사
+                    </button>
+                  )}
+                </div>
+
+                <p style={{ marginTop: 28, fontSize: 11, color: '#444857' }}>
+                  1~45 중 무작위 6개 추출 · 참고용
+                </p>
               </div>
             </div>
           </div>

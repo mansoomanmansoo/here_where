@@ -3,6 +3,7 @@ export const config = { regions: ['icn1'] }
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=600')
 
   try {
     const r = await fetch('https://lotto.agptedu.com/lotto-area-search/', {

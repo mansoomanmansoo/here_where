@@ -233,6 +233,12 @@ html, body, #root { margin: 0; height: 100%; }
   text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 .lotto-ball--bonus { outline: 3px solid rgba(255,255,255,0.25); }
+.lotto-ball--spin { animation: ball-flip 0.08s ease-in-out; }
+@keyframes ball-flip {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.7); opacity: 0.5; }
+  100% { transform: scale(1); opacity: 1; }
+}
 .lotto-plus { font-size: 18px; color: #555a66; font-weight: 300; }
 .lotto-ranks { display: flex; flex-direction: column; gap: 2px; }
 .lotto-rank-row {
