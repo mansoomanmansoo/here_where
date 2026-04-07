@@ -85,25 +85,18 @@ export default function App() {
   const globalPresenceRef = useRef(null)
   const endRef            = useRef(null)
 
-  // ── 전국 당첨점 데이터 로드 ──
+  // ── 전국 명당 데이터 로드 (lotto.agptedu.com, 주소 포함) ──
   useEffect(() => {
-    fetch('/api/lottery-stores?perPage=1000')
+    fetch('/api/lottery-stores')
       .then(r => r.json())
       .then(json => {
         const rows = json.data || []
+        // 이름 매칭용 맵
         const map = {}
-        rows.forEach(r => {
-          const name = r['상호']
-          const wins = parseInt(r['1등 자동 당첨 건수']) || 0
-          if (name) map[name] = (map[name] || 0) + wins
-        })
+        rows.forEach(r => { if (r.name) map[r.name] = r.wins })
         setWinnerMap(map)
-        // 랭킹: 당첨 많은 순
-        const sorted = Object.entries(map)
-          .map(([name, wins]) => ({ name, wins, region: rows.find(r => r['상호'] === name)?.['지역'] || '' }))
-          .sort((a, b) => b.wins - a.wins)
-          .slice(0, 50)
-        setTopWinners(sorted)
+        // 랭킹 (주소 있는 것 우선)
+        setTopWinners(rows.filter(r => r.name).slice(0, 50))
       })
       .catch(() => {})
   }, [])
@@ -557,13 +550,24 @@ export default function App() {
               </div>
               <div className="ranking-list">
                 {topWinners.map((w, i) => (
-                  <div key={w.name} className="ranking-row">
+                  <div key={w.addr || w.name} className="ranking-row" style={{ cursor: w.addr ? 'pointer' : 'default' }}
+                    onClick={() => {
+                      if (!w.addr) return
+                      setShowRanking(false)
+                      const geocoder = new window.kakao.maps.services.Geocoder()
+                      geocoder.addressSearch(w.addr, (data, status) => {
+                        if (status === window.kakao.maps.services.Status.OK && data[0]) {
+                          kakaoMapRef.current?.setCenter(new window.kakao.maps.LatLng(parseFloat(data[0].y), parseFloat(data[0].x)))
+                          kakaoMapRef.current?.setLevel(3)
+                        }
+                      })
+                    }}>
                     <span className={`ranking-num ${i < 3 ? 'ranking-num--top' : ''}`}>{i + 1}</span>
                     <div className="ranking-info">
                       <span className="ranking-name">{w.name}</span>
                       <span className="ranking-region">{w.region}</span>
                     </div>
-                    <span className="ranking-wins">{w.wins}회</span>
+                    <span className="ranking-wins">{w.wins > 0 ? `${w.wins}회` : '명당'}</span>
                   </div>
                 ))}
               </div>
