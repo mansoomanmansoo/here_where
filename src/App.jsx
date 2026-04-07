@@ -380,9 +380,18 @@ export default function App() {
     try {
       const r = await fetch('/api/lotto-result')
       const data = await r.json()
-      setLottoResult(data)
-    } catch { }
-    finally { setLottoLoading(false) }
+      if (data.error || !data.numbers) {
+        console.error('lotto api error:', data)
+        setLottoResult(null)
+      } else {
+        setLottoResult(data)
+      }
+    } catch (e) {
+      console.error('lotto fetch error:', e)
+      setLottoResult(null)
+    } finally {
+      setLottoLoading(false)
+    }
   }
 
   function shareRoom() {
@@ -551,21 +560,19 @@ export default function App() {
                         </span>
                       </div>
 
-                      {/* 등위별 당첨금 */}
+                      {/* 1등 당첨 정보 */}
                       <div className="lotto-ranks">
-                        {lottoResult.ranks.sort((a,b) => a.rank - b.rank).map(r => (
-                          <div key={r.rank} className="lotto-rank-row">
-                            <span className={`lotto-rank-num ${r.rank === 1 ? 'lotto-rank-num--1st' : ''}`}>{r.rank}등</span>
-                            <div className="lotto-rank-info">
-                              <span className="lotto-rank-prize">
-                                {r.prize >= 100000000
-                                  ? `${(r.prize / 100000000).toFixed(1)}억원`
-                                  : `${(r.prize / 10000).toFixed(0)}만원`}
-                              </span>
-                              <span className="lotto-rank-winners">{r.winners.toLocaleString()}명</span>
-                            </div>
+                        <div className="lotto-rank-row">
+                          <span className="lotto-rank-num lotto-rank-num--1st">1등</span>
+                          <div className="lotto-rank-info">
+                            <span className="lotto-rank-prize">
+                              {lottoResult.first.prize >= 100000000
+                                ? `${(lottoResult.first.prize / 100000000).toFixed(1)}억원`
+                                : `${(lottoResult.first.prize / 10000).toFixed(0)}만원`}
+                            </span>
+                            <span className="lotto-rank-winners">{lottoResult.first.winners.toLocaleString()}명 당첨</span>
                           </div>
-                        ))}
+                        </div>
                       </div>
 
                       <p style={{ fontSize: 11, color: '#555a66', textAlign: 'center', marginTop: 16 }}>
