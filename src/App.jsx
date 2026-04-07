@@ -544,16 +544,20 @@ export default function App() {
 
   // ── 오늘 방문자 수 ──
   useEffect(() => {
-    const key = 'luck_visited_' + new Date().toDateString()
-    const today = new Date().toISOString().slice(0, 10)
-    if (!sessionStorage.getItem(key)) {
-      sessionStorage.setItem(key, '1')
-      supabase.from('visits').insert({})
+    async function trackVisit() {
+      const key = 'luck_visited_' + new Date().toDateString()
+      const today = new Date().toISOString().slice(0, 10)
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1')
+        await supabase.from('visits').insert({ visited_at: new Date().toISOString() })
+      }
+      const { count } = await supabase
+        .from('visits')
+        .select('*', { count: 'exact', head: true })
+        .gte('visited_at', today + 'T00:00:00.000Z')
+      if (count) setTodayVisits(count)
     }
-    supabase.from('visits')
-      .select('*', { count: 'exact', head: true })
-      .gte('visited_at', today + 'T00:00:00.000Z')
-      .then(({ count }) => { if (count) setTodayVisits(count) })
+    trackVisit()
   }, [])
 
   const totalVotes = Object.values(vibeVotes).reduce((a, b) => a + b, 0)
