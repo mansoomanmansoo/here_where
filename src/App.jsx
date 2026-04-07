@@ -612,9 +612,41 @@ export default function App() {
                         </span>
                       </div>
 
-                      <p style={{ fontSize: 12, color: '#9296a3', textAlign: 'center', marginTop: 8 }}>
+                      <p style={{ fontSize: 12, color: '#9296a3', textAlign: 'center', marginTop: 8, marginBottom: 20 }}>
                         보너스 번호 포함
                       </p>
+
+                      {/* 이번 회차 1등 당첨점 리스트 */}
+                      {thisWeekWinners.length > 0 && (
+                        <>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: '#f4f4f5', marginBottom: 10 }}>
+                            👑 제{thisWeekDrwNo}회 1등 당첨점 ({thisWeekWinners.length}곳)
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {thisWeekWinners.map((w, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'rgba(138,43,226,0.1)', border: '1px solid rgba(180,100,255,0.25)', borderRadius: 12 }}>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: '#f4f4f5' }}>{w.name || '판매점'}</div>
+                                  <div style={{ fontSize: 11, color: '#9296a3', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.addr}</div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    setShowLotto(false)
+                                    kakaoMapRef.current?.setCenter(new window.kakao.maps.LatLng(w.lat, w.lng))
+                                    kakaoMapRef.current?.setLevel(3)
+                                  }}
+                                  style={{ flexShrink: 0, marginLeft: 8, background: 'rgba(138,43,226,0.7)', border: 'none', borderRadius: 8, color: '#fff', padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}
+                                >
+                                  지도보기
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {thisWeekWinners.length === 0 && (
+                        <p style={{ fontSize: 12, color: '#555a66', textAlign: 'center' }}>당첨점 위치 로딩 중...</p>
+                      )}
                     </>
                   )
                 })()}
