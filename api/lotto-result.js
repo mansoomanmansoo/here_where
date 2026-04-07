@@ -1,54 +1,60 @@
-// 로또 당첨번호 + 이번 회차 1등 당첨점 (lotto.agptedu.com 스크레이핑)
+// 동행복권 로또 당첨번호 (세션 쿠키 방식)
 export const config = { regions: ['icn1'] }
+
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'ko-KR,ko;q=0.9',
+  'Referer': 'https://www.dhlottery.co.kr/',
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
 
   try {
-    const r = await fetch('https://lotto.agptedu.com/lotto-area-search/?addr=서울', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
-      }
-    })
-    const html = await r.text()
+    // 1단계: 메인 페이지에서 세션 쿠키 + 최신 회차 획득
+    const mainRes = await fetch('https://www.dhlottery.co.kr/common.do?method=main', { headers: HEADERS })
+    const cookies = mainRes.headers.get('set-cookie') || ''
+    const mainHtml = await mainRes.text()
 
-    // ── 회차 & 날짜 ──
-    const drwMatch = html.match(/제\s*(\d+)\s*회/)
-    const dateMatch = html.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/)
-    const drwNo = drwMatch ? parseInt(drwMatch[1]) : null
-    const drwDate = dateMatch ? `${dateMatch[1]}-${String(dateMatch[2]).padStart(2,'0')}-${String(dateMatch[3]).padStart(2,'0')}` : null
+    // 최신 회차 추출 (id="lottoDrwNo")
+    const drwNoMatch = mainHtml.match(/id="lottoDrwNo">(\d+)</)
+    let drwNo = drwNoMatch
+      ? parseInt(drwNoMatch[1])
+      : Math.floor((Date.now() - new Date('2002-12-07').getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
 
-    // ── 당첨번호 (l-ball 클래스) ──
-    const ballMatches = [...html.matchAll(/class="l-ball[^"]*">(\d+)</g)]
-    const balls = ballMatches.map(m => parseInt(m[1]))
-    const numbers = balls.slice(0, 6)
-    const bonus = balls[6] ?? null
+    // 2단계: 쿠키 들고 당첨번호 API 호출
+    const apiRes = await fetch(
+      `https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo=${drwNo}`,
+      { headers: { ...HEADERS, Cookie: cookies } }
+    )
+    const text = await apiRes.text()
 
-    // ── 1등 당첨점 테이블 (상호명, 주소, 당첨구분) ──
-    const winners = []
-    // <tr> 행에서 td 값 추출
-    const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
-    const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi
-    let rowM
-    while ((rowM = rowRe.exec(html)) !== null) {
-      const cells = [...rowM[1].matchAll(tdRe)].map(m =>
-        m[1].replace(/<[^>]+>/g, '').trim()
+    // JSON 파싱 시도
+    let d
+    try { d = JSON.parse(text) } catch {
+      // 여전히 HTML이면 직전 회차 재시도
+      const apiRes2 = await fetch(
+        `https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo=${drwNo - 1}`,
+        { headers: { ...HEADERS, Cookie: cookies } }
       )
-      // 주소처럼 보이는 행 (시/도 포함, 4개 이상 셀)
-      if (cells.length >= 3 && cells.some(c => c.match(/특별시|광역시|도\s|시\s|구\s/))) {
-        const name = cells[0]
-        const type = cells[1]
-        const addr = cells.find(c => c.match(/특별시|광역시|도\s|시\s|구\s/)) || ''
-        if (name && addr) winners.push({ name, type, addr })
-      }
+      const text2 = await apiRes2.text()
+      try { d = JSON.parse(text2); drwNo = drwNo - 1 }
+      catch { return res.status(500).json({ error: '파싱 실패', raw: text.slice(0, 200) }) }
     }
 
-    if (!drwNo || numbers.length < 6) {
-      return res.status(500).json({ error: '파싱 실패', html: html.slice(0, 500) })
+    if (d.returnValue !== 'success') {
+      return res.status(500).json({ error: 'API returnValue 실패', d })
     }
 
-    return res.status(200).json({ drwNo, drwDate, numbers, bonus, winners })
+    return res.status(200).json({
+      drwNo: d.drwNo,
+      drwDate: d.drwNoDate,
+      numbers: [d.drwtNo1, d.drwtNo2, d.drwtNo3, d.drwtNo4, d.drwtNo5, d.drwtNo6],
+      bonus: d.bnusNo,
+      totSellAmt: d.totSellamnt,
+      first: { winners: d.firstPrzwnerCo, prize: d.firstWinamnt },
+    })
   } catch (e) {
     return res.status(500).json({ error: e.message })
   }
