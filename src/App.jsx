@@ -7,7 +7,6 @@ const RATE_LIMIT_MS = 8000
 const MAX_MSG_LEN = 160
 const BANNED_WORDS = ['광고', '홍보', '카톡', '텔레그램', '연락처', '전화번호']
 const VIBE_OPTIONS = ['명당이에요', '그냥 그래요', '아직 안 나왔어요']
-const QUICK_UPDATES = ['줄 없어요', '줄 있어요', '용지 있어요', '마감 임박', '기계 정상', '기계 고장', '명당이에요']
 const COLORS = ['#ff6b6b', '#4ecdc4', '#ffe66d', '#a8e6cf', '#dda0dd', '#87ceeb', '#f4a460', '#98d8c8']
 
 // ── Utilities ──────────────────────────────────────────────
@@ -59,7 +58,6 @@ export default function App() {
   const [selectedPlace, setSelectedPlace] = useState(null)
   const [activePlace, setActivePlace] = useState(null)
   const [messages, setMessages] = useState([])
-  const [updates, setUpdates] = useState([])
   const [vibeVotes, setVibeVotes] = useState({})
   const [messageInput, setMessageInput] = useState('')
   const [notice, setNotice] = useState('')
@@ -155,8 +153,7 @@ export default function App() {
         ({ new: msg }) => {
           if (new Date(msg.created_at).getTime() < Date.now() - TTL_MS) return
           if (msg.nick === myNick) return
-          if (msg.type === 'update') setUpdates(p => [msg, ...p].slice(0, 8))
-          else setMessages(p => [...p, msg])
+          if (msg.type === 'message') setMessages(p => [...p, msg])
         })
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'vibe_votes', filter: `place_id=eq.${activePlace.id}` },
@@ -301,7 +298,6 @@ export default function App() {
         supabase.from('vibe_votes').select('label').eq('place_id', pid).gt('created_at', ttlDate()),
       ])
       setMessages((msgs || []).filter(m => m.type === 'message'))
-      setUpdates((msgs || []).filter(m => m.type === 'update').reverse().slice(0, 8))
       const counts = {}
       ;(votes || []).forEach(v => { counts[v.label] = (counts[v.label] || 0) + 1 })
       setVibeVotes(counts)
@@ -311,7 +307,7 @@ export default function App() {
 
   // ── 장소 입장 ──
   function enterPlace(place) {
-    setMessages([]); setUpdates([]); setVibeVotes({})
+    setMessages([]); setVibeVotes({})
     setMyVibe(''); setMessageInput('')
     setActivePlace(place); setSelectedPlace(null)
     setScreen('chat')
@@ -328,9 +324,6 @@ export default function App() {
     if (type === 'message') {
       setMessages(p => [...p, { ...msg, id: 'tmp-' + Date.now(), created_at: new Date().toISOString() }])
       setMessageInput('')
-    } else {
-      setUpdates(p => [{ ...msg, id: 'tmp-' + Date.now(), created_at: new Date().toISOString() }, ...p].slice(0, 8))
-      setNotice('정보가 반영됐어요.')
     }
     setLastSentAt(Date.now())
     const { error } = await supabase.from('messages').insert(msg)
@@ -530,29 +523,6 @@ export default function App() {
                     })}
                   </div>
                   {!myVibe && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#6b6f7a', textAlign: 'center' }}>탭해서 투표하기</p>}
-                </div>
-
-                {/* 현장 정보 */}
-                <div className="panel">
-                  <div className="section-title inner"><span>현장 정보</span></div>
-                  <div className="chips-row wrap">
-                    {QUICK_UPDATES.map(label => (
-                      <button key={label} className="chip" onClick={() => send(label, 'update')}>{label}</button>
-                    ))}
-                  </div>
-                  {updates.length > 0 && (
-                    <div className="activity-feed" style={{ marginTop: 10 }}>
-                      {updates.map(u => (
-                        <div key={u.id} className="activity-row">
-                          <span className="dot" style={{ background: u.color }} />
-                          <div>
-                            <strong>{u.text}</strong>
-                            <small>{u.nick} · {relativeTime(u.created_at)}</small>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 {/* 익명 대화 */}
