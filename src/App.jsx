@@ -55,6 +55,9 @@ export default function App() {
   const [winnerMap, setWinnerMap] = useState({})       // { 상호: 당첨건수 }
   const [topWinners, setTopWinners] = useState([])     // 랭킹용 전체 목록
   const [showRanking, setShowRanking] = useState(false)
+  const [showLotto, setShowLotto] = useState(false)
+  const [lottoResult, setLottoResult] = useState(null)
+  const [lottoLoading, setLottoLoading] = useState(false)
   const [selectedPlace, setSelectedPlace] = useState(null)
   const [activePlace, setActivePlace] = useState(null)
   const [messages, setMessages] = useState([])
@@ -370,6 +373,18 @@ export default function App() {
     if (error) { setMyVibe(''); setVibeVotes(p => ({ ...p, [label]: Math.max(0, (p[label] || 1) - 1) })) }
   }
 
+  async function openLotto() {
+    setShowLotto(true)
+    if (lottoResult) return
+    setLottoLoading(true)
+    try {
+      const r = await fetch('/api/lotto-result')
+      const data = await r.json()
+      setLottoResult(data)
+    } catch { }
+    finally { setLottoLoading(false) }
+  }
+
   function shareRoom() {
     const url = `${location.origin}${location.pathname}?place=${activePlace.kakaoId}`
     navigator.clipboard?.writeText(url).catch(() => {})
@@ -396,6 +411,7 @@ export default function App() {
                 <span className="online-dot" />{onlineCount}명 접속 중
               </div>
             )}
+            <button className="map-icon-btn" onClick={openLotto} title="이번 주 당첨번호">🎱</button>
             <button className="map-icon-btn" onClick={() => setShowRanking(true)} title="전국 명당 랭킹">🏆</button>
             <button className="map-icon-btn" onClick={locateUser} disabled={gpsLoading}>
               {gpsLoading ? '⟳' : '📍'}
@@ -489,6 +505,78 @@ export default function App() {
                     <span className="ranking-wins">{w.wins}회</span>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 당첨번호 패널 */}
+        {showLotto && (
+          <div className="ranking-overlay" onClick={e => e.target === e.currentTarget && setShowLotto(false)}>
+            <div className="ranking-panel">
+              <div className="ranking-header">
+                <div>
+                  <h3 style={{ margin: 0 }}>🎱 당첨번호 확인</h3>
+                  {lottoResult && (
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9296a3' }}>
+                      제{lottoResult.drwNo}회 · {lottoResult.drwNoDate}
+                    </p>
+                  )}
+                </div>
+                <button className="ranking-close" onClick={() => setShowLotto(false)}>✕</button>
+              </div>
+
+              <div style={{ padding: '20px 20px 32px' }}>
+                {lottoLoading && (
+                  <p style={{ textAlign: 'center', color: '#9296a3', padding: '20px 0' }}>불러오는 중...</p>
+                )}
+                {!lottoLoading && lottoResult && (() => {
+                  const ballColor = (n) => {
+                    if (n <= 10) return '#fbc400'
+                    if (n <= 20) return '#69c8f2'
+                    if (n <= 30) return '#ff7272'
+                    if (n <= 40) return '#aaaaaa'
+                    return '#b0d840'
+                  }
+                  return (
+                    <>
+                      {/* 번호 볼 */}
+                      <div className="lotto-balls">
+                        {lottoResult.numbers.map(n => (
+                          <span key={n} className="lotto-ball" style={{ background: ballColor(n) }}>{n}</span>
+                        ))}
+                        <span className="lotto-plus">+</span>
+                        <span className="lotto-ball lotto-ball--bonus" style={{ background: ballColor(lottoResult.bonus) }}>
+                          {lottoResult.bonus}
+                        </span>
+                      </div>
+
+                      {/* 등위별 당첨금 */}
+                      <div className="lotto-ranks">
+                        {lottoResult.ranks.sort((a,b) => a.rank - b.rank).map(r => (
+                          <div key={r.rank} className="lotto-rank-row">
+                            <span className={`lotto-rank-num ${r.rank === 1 ? 'lotto-rank-num--1st' : ''}`}>{r.rank}등</span>
+                            <div className="lotto-rank-info">
+                              <span className="lotto-rank-prize">
+                                {r.prize >= 100000000
+                                  ? `${(r.prize / 100000000).toFixed(1)}억원`
+                                  : `${(r.prize / 10000).toFixed(0)}만원`}
+                              </span>
+                              <span className="lotto-rank-winners">{r.winners.toLocaleString()}명</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <p style={{ fontSize: 11, color: '#555a66', textAlign: 'center', marginTop: 16 }}>
+                        총 판매금액 {(lottoResult.totSellAmt / 100000000).toFixed(0)}억원
+                      </p>
+                    </>
+                  )
+                })()}
+                {!lottoLoading && !lottoResult && (
+                  <p style={{ textAlign: 'center', color: '#ff8a8a' }}>정보를 불러오지 못했어요.</p>
+                )}
               </div>
             </div>
           </div>
