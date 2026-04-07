@@ -1,4 +1,6 @@
-// 동행복권 로또 당첨번호 프록시
+// 동행복권 로또 당첨번호 프록시 (서울 리전 실행)
+export const config = { regions: ['icn1'] }
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
 
