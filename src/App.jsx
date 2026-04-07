@@ -131,6 +131,10 @@ export default function App() {
       const c = map.getCenter()
       searchNearby(c.getLat(), c.getLng())
     })
+    kakao.maps.event.addListener(map, 'zoom_changed', () => {
+      const c = map.getCenter()
+      searchNearby(c.getLat(), c.getLng())
+    })
     locateUser()
   }, [kakaoReady])
 
@@ -203,33 +207,57 @@ export default function App() {
     )
   }
 
-  // ── 주변 복권 판매점 검색 ──
+  // ── 줌 레벨 → 검색 반경 ──
+  function getSearchRadius() {
+    const level = kakaoMapRef.current?.getLevel() || 4
+    if (level <= 3) return 500
+    if (level <= 4) return 1000
+    if (level <= 5) return 2000
+    if (level <= 6) return 4000
+    if (level <= 7) return 7000
+    return 12000
+  }
+
+  // ── 주변 복권 판매점 검색 (페이지네이션으로 최대 45개) ──
   function searchNearby(lat, lng) {
     const { kakao } = window
     if (!kakao?.maps?.services?.Places) return
     const ps = new kakao.maps.services.Places()
+    const radius = getSearchRadius()
+    const all = []
 
-    ps.keywordSearch(
-      '복권',
-      (data, status) => {
-        if (status !== kakao.maps.services.Status.OK) {
-          setNearbyPlaces([])
-          return
-        }
-        const places = data.map(p => ({
-          id: `kakao::${p.id}`,
-          kakaoId: p.id,
-          name: p.place_name,
-          address: p.road_address_name || p.address_name,
-          lat: parseFloat(p.y),
-          lng: parseFloat(p.x),
-          distance: parseInt(p.distance) || 0,
-        }))
-        setNearbyPlaces(places)
-        if (places.length) loadActivityForPlaces(places.map(p => p.id))
-      },
-      { location: new kakao.maps.LatLng(lat, lng), radius: 1000, size: 15, sort: kakao.maps.services.SortBy.DISTANCE }
-    )
+    function fetchPage(page) {
+      ps.keywordSearch(
+        '복권',
+        (data, status, pagination) => {
+          if (status === kakao.maps.services.Status.OK) {
+            data.forEach(p => {
+              all.push({
+                id: `kakao::${p.id}`,
+                kakaoId: p.id,
+                name: p.place_name,
+                address: p.road_address_name || p.address_name,
+                lat: parseFloat(p.y),
+                lng: parseFloat(p.x),
+                distance: parseInt(p.distance) || 0,
+              })
+            })
+            // 최대 3페이지(45개)까지 수집
+            if (pagination.hasNextPage && page < 3) {
+              fetchPage(page + 1)
+              return
+            }
+          }
+          const unique = Array.from(new Map(all.map(p => [p.kakaoId, p])).values())
+            .sort((a, b) => a.distance - b.distance)
+          setNearbyPlaces(unique)
+          if (unique.length) loadActivityForPlaces(unique.map(p => p.id))
+        },
+        { location: new kakao.maps.LatLng(lat, lng), radius, size: 15, page, sort: kakao.maps.services.SortBy.DISTANCE }
+      )
+    }
+
+    fetchPage(1)
   }
 
   // ── Supabase 활동량 조회 ──
