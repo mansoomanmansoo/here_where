@@ -1,4 +1,4 @@
-// 전국 명당 랭킹 + 주소 (lotto.agptedu.com 지역별 TOP10 스크래핑)
+// 전국 명당 랭킹 (lotto.agptedu.com 지역별 TOP10)
 export const config = { regions: ['icn1'] }
 
 export default async function handler(req, res) {
@@ -13,35 +13,52 @@ export default async function handler(req, res) {
     })
     const html = await r.text()
 
-    // addr= 링크에서 이름 + 주소 추출
-    // <a href="...addr=ADDRESS..."><span class="iw_title_text">NAME</span>
     const stores = []
     const seen = new Set()
 
-    const blockRe = /<a\s+href="[^"]*[?&]addr=([^"#&]+)[^"]*"[^>]*>([\s\S]*?)<\/a>/g
-    let m
-    while ((m = blockRe.exec(html)) !== null) {
-      const addr = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim()
-      if (!addr || seen.has(addr)) continue
-      if (!addr.match(/특별시|광역시|도\s|시\s|구\s|\d+/)) continue
+    // shop-name + win-count 쌍 추출
+    const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+    let rowM
+    while ((rowM = rowRe.exec(html)) !== null) {
+      const row = rowM[1]
+      const nameMatch = row.match(/class="shop-name"[^>]*>([\s\S]*?)<\//)
+      const winsMatch = row.match(/class="win-count"[^>]*>(\d+)/)
+      // addr= 링크가 같은 행에 있으면 추출
+      const addrMatch = row.match(/[?&]addr=([^"#&]+)/)
 
-      // 이름: iw_title_text 클래스
-      const nameMatch = m[2].match(/class="iw_title_text"[^>]*>([\s\S]*?)</)
-      const name = nameMatch ? nameMatch[1].replace(/<[^>]+>/g, '').trim() : ''
+      if (!nameMatch) continue
+      const name = nameMatch[1].replace(/<[^>]+>/g, '').trim()
+      if (!name || seen.has(name)) continue
 
-      // 당첨 횟수: 숫자 추출
-      const winsMatch = m[2].match(/(\d+)\s*회/)
       const wins = winsMatch ? parseInt(winsMatch[1]) : 0
+      const addr = addrMatch ? decodeURIComponent(addrMatch[1].replace(/\+/g, ' ')).trim() : ''
+      const region = addr ? addr.split(' ')[0] : ''
 
-      // 지역 (주소 첫 단어)
-      const region = addr.split(' ')[0]
-
-      seen.add(addr)
-      stores.push({ name, addr, region, wins })
+      seen.add(name)
+      stores.push({ name, wins, addr, region })
     }
 
-    // 당첨 횟수 내림차순 정렬
+    // iw_title_text 방식도 병행 (테이블 구조가 다를 경우 대비)
+    if (stores.length < 10) {
+      const blockRe = /class="iw_title_text"[^>]*>([\s\S]*?)<\/[\s\S]*?(\d+)\s*회/g
+      let m
+      while ((m = blockRe.exec(html)) !== null) {
+        const name = m[1].replace(/<[^>]+>/g, '').trim()
+        const wins = parseInt(m[2])
+        if (name && !seen.has(name)) {
+          seen.add(name)
+          stores.push({ name, wins, addr: '', region: '' })
+        }
+      }
+    }
+
     stores.sort((a, b) => b.wins - a.wins)
+
+    // 파싱 결과가 너무 적으면 디버그 정보 포함
+    if (stores.length < 5) {
+      const snippet = html.slice(html.indexOf('shop-name') - 100, html.indexOf('shop-name') + 500)
+      return res.status(200).json({ totalCount: stores.length, data: stores, debug: snippet })
+    }
 
     return res.status(200).json({ totalCount: stores.length, data: stores })
   } catch (e) {
