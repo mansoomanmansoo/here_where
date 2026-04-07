@@ -81,6 +81,7 @@ export default function App() {
   const [mapError, setMapError] = useState('')
   const [onlineCount, setOnlineCount] = useState(0)
   const [roomCount, setRoomCount] = useState(0)
+  const [todayVisits, setTodayVisits] = useState(0)
 
   const identity = useMemo(() => getIdentity(), [])
   const { nick: myNick, color: myColor } = identity
@@ -541,6 +542,20 @@ export default function App() {
     setNotice('공유 링크를 복사했어요.')
   }
 
+  // ── 오늘 방문자 수 ──
+  useEffect(() => {
+    const key = 'luck_visited_' + new Date().toDateString()
+    const today = new Date().toISOString().slice(0, 10)
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, '1')
+      supabase.from('visits').insert({})
+    }
+    supabase.from('visits')
+      .select('*', { count: 'exact', head: true })
+      .gte('visited_at', today + 'T00:00:00.000Z')
+      .then(({ count }) => { if (count) setTodayVisits(count) })
+  }, [])
+
   const totalVotes = Object.values(vibeVotes).reduce((a, b) => a + b, 0)
 
   // ── Render ──────────────────────────────────────────────
@@ -556,6 +571,11 @@ export default function App() {
         <div className="map-top">
           <div className="map-logo">goodluck<span className="logo-dot">.</span></div>
           <div className="map-top-right">
+            {todayVisits > 0 && (
+              <div className="online-badge online-badge--visits">
+                오늘 {todayVisits.toLocaleString()}명 방문
+              </div>
+            )}
             {onlineCount > 0 && (
               <div className="online-badge">
                 <span className="online-dot" />{onlineCount}명 접속 중
