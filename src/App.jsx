@@ -54,6 +54,8 @@ export default function App() {
   const [placeActivity, setPlaceActivity] = useState({})
   const [winnerMap, setWinnerMap] = useState({})       // { 상호: 당첨건수 }
   const [topWinners, setTopWinners] = useState([])     // 랭킹용 전체 목록
+  const [thisWeekWinners, setThisWeekWinners] = useState([]) // 이번 회차 당첨점 [{name,addr,lat,lng}]
+  const [thisWeekDrwNo, setThisWeekDrwNo] = useState(null)
   const [showRanking, setShowRanking] = useState(false)
   const [showLotto, setShowLotto] = useState(false)
   const [lottoResult, setLottoResult] = useState(null)
@@ -121,6 +123,30 @@ export default function App() {
     document.head.appendChild(script)
   }, [])
 
+  // ── 이번 회차 당첨점 로드 + 지오코딩 ──
+  useEffect(() => {
+    if (!kakaoReady) return
+    fetch('/api/lotto-winners')
+      .then(r => r.json())
+      .then(({ drwNo, stores }) => {
+        if (!stores?.length) return
+        setThisWeekDrwNo(drwNo)
+        const geocoder = new window.kakao.maps.services.Geocoder()
+        const results = []
+        let done = 0
+        stores.forEach(({ name, addr }) => {
+          geocoder.addressSearch(addr, (data, status) => {
+            if (status === window.kakao.maps.services.Status.OK && data[0]) {
+              results.push({ name, addr, lat: parseFloat(data[0].y), lng: parseFloat(data[0].x) })
+            }
+            done++
+            if (done === stores.length) setThisWeekWinners([...results])
+          })
+        })
+      })
+      .catch(() => {})
+  }, [kakaoReady])
+
   // ── 지도 초기화 ──
   useEffect(() => {
     if (!kakaoReady || !mapContainerRef.current || kakaoMapRef.current) return
@@ -141,10 +167,36 @@ export default function App() {
     locateUser()
   }, [kakaoReady])
 
-  // ── 핀 재렌더 (활동량 or 당첨 데이터 바뀔 때) ──
+  // ── 핀 재렌더 ──
   useEffect(() => {
     if (kakaoMapRef.current && nearbyPlaces.length > 0) renderPins()
   }, [nearbyPlaces, placeActivity, winnerMap])
+
+  // ── 이번 회차 당첨점 핀 ──
+  const thisWeekOverlaysRef = useRef([])
+  useEffect(() => {
+    if (!kakaoReady || !kakaoMapRef.current || !thisWeekWinners.length) return
+    const { kakao } = window
+    thisWeekOverlaysRef.current.forEach(o => o.setMap(null))
+    thisWeekOverlaysRef.current = []
+    thisWeekWinners.forEach(({ name, lat, lng }) => {
+      const div = document.createElement('div')
+      div.className = 'map-pin map-pin--this-week'
+      div.innerHTML = `<div class="pin-inner"><span class="pin-label">👑</span></div>`
+      div.addEventListener('click', e => {
+        e.stopPropagation()
+        setNotice(`🏆 제${thisWeekDrwNo}회 1등 당첨점: ${name}`)
+      })
+      const overlay = new kakao.maps.CustomOverlay({
+        map: kakaoMapRef.current,
+        position: new kakao.maps.LatLng(lat, lng),
+        content: div,
+        yAnchor: 1.2,
+        zIndex: 30,
+      })
+      thisWeekOverlaysRef.current.push(overlay)
+    })
+  }, [thisWeekWinners, kakaoReady])
 
   // ── 채팅방 Realtime 구독 ──
   useEffect(() => {
@@ -444,9 +496,9 @@ export default function App() {
         {/* 범례 */}
         {nearbyPlaces.length > 0 && (
           <div className="map-legend">
+            {thisWeekDrwNo && <span className="legend-item"><span className="legend-dot legend-dot--this-week" />제{thisWeekDrwNo}회 1등</span>}
             <span className="legend-item"><span className="legend-dot legend-dot--legend" />명당(3회↑)</span>
             <span className="legend-item"><span className="legend-dot legend-dot--winner" />당첨 이력</span>
-            <span className="legend-item"><span className="legend-dot legend-dot--hot" />커뮤니티 핫</span>
             <span className="legend-item"><span className="legend-dot legend-dot--normal" />일반</span>
           </div>
         )}

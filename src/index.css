@@ -104,6 +104,9 @@ html, body, #root { margin: 0; height: 100%; }
 .map-pin:hover .pin-inner { transform: rotate(-45deg) scale(1.12); }
 .pin-label { transform: rotate(45deg); font-size: 13px; font-weight: 800; line-height: 1; white-space: nowrap; color: #fff; }
 
+.map-pin--this-week .pin-inner { background: rgba(138,43,226,1); box-shadow: 0 0 28px rgba(180,100,255,0.9); animation: pin-pulse-purple 1.4s ease-in-out infinite; border-color: rgba(200,150,255,0.6); }
+@keyframes pin-pulse-purple { 0%,100% { box-shadow: 0 0 28px rgba(180,100,255,0.9); } 50% { box-shadow: 0 0 50px rgba(180,100,255,1), 0 0 80px rgba(180,100,255,0.4); } }
+.legend-dot--this-week { background: rgba(138,43,226,1); box-shadow: 0 0 6px rgba(180,100,255,0.9); }
 .map-pin--normal  .pin-inner { background: rgba(70,75,90,0.88); }
 .map-pin--active  .pin-inner { background: rgba(50,130,255,0.9); box-shadow: 0 0 12px rgba(50,130,255,0.5); }
 .map-pin--hot     .pin-inner { background: rgba(255,80,80,0.95); box-shadow: 0 0 20px rgba(255,80,80,0.7); animation: pin-pulse-red 1.4s ease-in-out infinite; }
