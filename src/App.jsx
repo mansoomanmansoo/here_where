@@ -528,7 +528,7 @@ export default function App() {
                   <h3 style={{ margin: 0 }}>🎱 당첨번호 확인</h3>
                   {lottoResult && (
                     <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9296a3' }}>
-                      제{lottoResult.drwNo}회 · {lottoResult.drwNoDate}
+                      제{lottoResult.drwNo}회 · {lottoResult.drwDate}
                     </p>
                   )}
                 </div>
@@ -560,23 +560,8 @@ export default function App() {
                         </span>
                       </div>
 
-                      {/* 1등 당첨 정보 */}
-                      <div className="lotto-ranks">
-                        <div className="lotto-rank-row">
-                          <span className="lotto-rank-num lotto-rank-num--1st">1등</span>
-                          <div className="lotto-rank-info">
-                            <span className="lotto-rank-prize">
-                              {lottoResult.first.prize >= 100000000
-                                ? `${(lottoResult.first.prize / 100000000).toFixed(1)}억원`
-                                : `${(lottoResult.first.prize / 10000).toFixed(0)}만원`}
-                            </span>
-                            <span className="lotto-rank-winners">{lottoResult.first.winners.toLocaleString()}명 당첨</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <p style={{ fontSize: 11, color: '#555a66', textAlign: 'center', marginTop: 16 }}>
-                        총 판매금액 {(lottoResult.totSellAmt / 100000000).toFixed(0)}억원
+                      <p style={{ fontSize: 12, color: '#9296a3', textAlign: 'center', marginTop: 8 }}>
+                        보너스 번호 포함
                       </p>
                     </>
                   )
