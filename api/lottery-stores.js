@@ -11,16 +11,20 @@ export default async function handler(req, res) {
   const { page = 1, perPage = 1000 } = req.query
 
   // 최신 데이터셋 (20250607 기준)
+  // serviceKey는 인코딩 없이 그대로 전달 (data.go.kr 요구사항)
   const url =
     `https://api.odcloud.kr/api/15059963/v1/uddi:76bba8dc-16b6-4898-96af-e3c056854ec3` +
-    `?serviceKey=${encodeURIComponent(key)}&page=${page}&perPage=${perPage}&returnType=JSON`
+    `?serviceKey=${key}&page=${page}&perPage=${perPage}&returnType=JSON`
 
   try {
-    const response = await fetch(url)
+    const response = await fetch(url, {
+      headers: { 'Authorization': key }
+    })
+    const text = await response.text()
     if (!response.ok) {
-      return res.status(response.status).json({ error: `upstream ${response.status}` })
+      return res.status(response.status).json({ error: `upstream ${response.status}`, detail: text.slice(0, 300) })
     }
-    const data = await response.json()
+    const data = JSON.parse(text)
     return res.status(200).json(data)
   } catch (e) {
     return res.status(500).json({ error: e.message })
