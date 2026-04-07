@@ -3,7 +3,7 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
 
-  const key = process.env.ODCLOUD_KEY
+  const key = (process.env.ODCLOUD_KEY || '').trim().replace(/\s+/g, '')
   if (!key) {
     return res.status(500).json({ error: 'API 키가 설정되지 않았습니다.' })
   }
