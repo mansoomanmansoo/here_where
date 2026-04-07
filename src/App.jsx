@@ -444,6 +444,17 @@ export default function App() {
   const globalChatRef = useRef(null)
   const globalEndRef = useRef(null)
 
+  // 앱 시작 시 메시지 수 미리 로드 (뱃지용)
+  useEffect(() => {
+    supabase
+      .from('messages')
+      .select('*')
+      .eq('place_id', 'global::all')
+      .gt('created_at', ttlDate())
+      .order('created_at', { ascending: true })
+      .then(({ data }) => { if (data?.length) setGlobalMessages(data) })
+  }, [])
+
   async function openGlobalChat() {
     setShowGlobalChat(true)
     if (globalMessages.length > 0) return
@@ -575,18 +586,18 @@ export default function App() {
         <div className="map-top">
           <div className="map-logo">goodluck<span className="logo-dot">.</span></div>
           <div className="map-top-right">
-            {todayVisits > 0 && (
-              <div className="online-badge online-badge--visits">
-                오늘 {todayVisits.toLocaleString()}명 방문
-              </div>
-            )}
             {onlineCount > 0 && (
               <div className="online-badge">
                 <span className="online-dot" />{onlineCount}명 접속 중
               </div>
             )}
             <button className="map-icon-btn" onClick={() => { setShowGenerator(true); if (!genNumbers.length) generateNumbers() }} title="번호 생성기">🎰</button>
-            <button className="map-icon-btn" onClick={openGlobalChat} title="전체 대화">💬</button>
+            <div style={{ position: 'relative' }}>
+              <button className="map-icon-btn" onClick={openGlobalChat} title="전체 대화">💬</button>
+              {globalMessages.length > 0 && (
+                <span className="chat-badge">{globalMessages.length > 99 ? '99+' : globalMessages.length}</span>
+              )}
+            </div>
             <button className="map-icon-btn" onClick={openLotto} title="이번 주 당첨번호">🎱</button>
             <button className="map-icon-btn" onClick={() => setShowRanking(true)} title="전국 명당 랭킹">🏆</button>
             <button className="map-icon-btn" onClick={locateUser} disabled={gpsLoading}>
@@ -607,6 +618,13 @@ export default function App() {
         <div className="map-nick-badge" style={{ borderColor: myColor }}>
           <span className="dot" style={{ background: myColor }} />{myNick}
         </div>
+
+        {/* 오늘 방문자 수 */}
+        {todayVisits > 0 && (
+          <div className="visit-counter">
+            🍀 오늘 <strong>{todayVisits.toLocaleString()}</strong>명이 명당을 찾았어요
+          </div>
+        )}
 
         {/* 범례 */}
         {nearbyPlaces.length > 0 && (

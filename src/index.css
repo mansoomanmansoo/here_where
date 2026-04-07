@@ -58,6 +58,24 @@ html, body, #root { margin: 0; height: 100%; }
   backdrop-filter: blur(8px);
 }
 .online-badge--visits { color: #ffd700; border-color: rgba(255,215,0,0.2); }
+
+/* ── Visit counter ── */
+.visit-counter {
+  position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+  background: rgba(9,9,11,0.82); border: 1px solid rgba(255,215,0,0.2);
+  border-radius: 20px; padding: 7px 16px; font-size: 12px; color: #9a9ea9;
+  white-space: nowrap; z-index: 10; backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+.visit-counter strong { color: #ffd700; }
+
+/* ── Chat badge ── */
+.chat-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: #ff6b6b; color: #fff; font-size: 10px; font-weight: 800;
+  border-radius: 10px; padding: 1px 5px; min-width: 16px; text-align: center;
+  pointer-events: none; line-height: 1.4;
+}
 .online-dot {
   width: 7px; height: 7px; border-radius: 50%;
   background: #4ade80; flex-shrink: 0;
