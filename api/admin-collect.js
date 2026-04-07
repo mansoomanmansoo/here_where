@@ -20,20 +20,19 @@ async function fetchRegion(region) {
   const stores = []
   const seen = new Set()
 
-  // iw_title_text(이름) + addr= 링크(주소) 추출
-  const blockRe = /<a\s+href="[^"]*[?&]addr=([^"#&]+)[^"]*"[^>]*>([\s\S]*?)<\/a>/g
+  // lotto-tbl 테이블에서 shop-name + win-count 파싱
+  const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
   let m
-  while ((m = blockRe.exec(html)) !== null) {
-    const addr = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim()
-    if (!addr || !addr.match(/특별시|광역시|\s[시군구]\s|\d+/)) continue
-    const nameM = m[2].match(/class="iw_title_text"[^>]*>([\s\S]*?)<\//)
-    const name = nameM ? nameM[1].replace(/<[^>]+>/g, '').trim() : ''
-    const winsM = m[2].match(/(\d+)\s*회/)
-    const wins = winsM ? parseInt(winsM[1]) : 0
-    const key = addr
-    if (seen.has(key)) continue
-    seen.add(key)
-    stores.push({ name, addr, region: addr.split(/\s/)[0] || region, wins, drw_no: null })
+  while ((m = rowRe.exec(html)) !== null) {
+    const row = m[1]
+    const nameM = row.match(/class="shop-name"[^>]*>([\s\S]*?)<\/span>/)
+    const winsM = row.match(/class="win-count"[^>]*>(\d+)/)
+    if (!nameM || !winsM) continue
+    const name = nameM[1].replace(/<[^>]+>/g, '').trim()
+    const wins = parseInt(winsM[1])
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    stores.push({ name, wins, addr: '', region, drw_no: null })
   }
   return stores
 }

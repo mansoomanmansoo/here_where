@@ -1,66 +1,63 @@
 // 전국 명당 랭킹 (lotto.agptedu.com 지역별 TOP10)
 export const config = { regions: ['icn1'] }
 
+const REGIONS = ['서울','부산','대구','인천','광주','대전','울산','경기','강원','충북','충남','전북','전남','경북','경남','제주']
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+  'Accept-Language': 'ko-KR,ko;q=0.9',
+}
+
+async function fetchRegion(region) {
+  const r = await fetch(
+    `https://lotto.agptedu.com/lotto-area-search/?addr=${encodeURIComponent(region)}`,
+    { headers: HEADERS }
+  )
+  const html = await r.text()
+  const stores = []
+  const seen = new Set()
+
+  const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+  let m
+  while ((m = rowRe.exec(html)) !== null) {
+    const row = m[1]
+    const nameM = row.match(/class="shop-name"[^>]*>([\s\S]*?)<\/span>/)
+    const winsM = row.match(/class="win-count"[^>]*>(\d+)/)
+    if (!nameM || !winsM) continue
+    const name = nameM[1].replace(/<[^>]+>/g, '').trim()
+    const wins = parseInt(winsM[1])
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    stores.push({ name, wins, region })
+  }
+  return stores
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
 
   try {
-    const r = await fetch('https://lotto.agptedu.com/lotto-area-search/', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'ko-KR,ko;q=0.9',
-      }
-    })
-    const html = await r.text()
-
-    const stores = []
+    const all = []
     const seen = new Set()
 
-    // shop-name + win-count 쌍 추출
-    const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
-    let rowM
-    while ((rowM = rowRe.exec(html)) !== null) {
-      const row = rowM[1]
-      const nameMatch = row.match(/class="shop-name"[^>]*>([\s\S]*?)<\//)
-      const winsMatch = row.match(/class="win-count"[^>]*>(\d+)/)
-      // addr= 링크가 같은 행에 있으면 추출
-      const addrMatch = row.match(/[?&]addr=([^"#&]+)/)
-
-      if (!nameMatch) continue
-      const name = nameMatch[1].replace(/<[^>]+>/g, '').trim()
-      if (!name || seen.has(name)) continue
-
-      const wins = winsMatch ? parseInt(winsMatch[1]) : 0
-      const addr = addrMatch ? decodeURIComponent(addrMatch[1].replace(/\+/g, ' ')).trim() : ''
-      const region = addr ? addr.split(' ')[0] : ''
-
-      seen.add(name)
-      stores.push({ name, wins, addr, region })
+    for (const region of REGIONS) {
+      const stores = await fetchRegion(region)
+      stores.forEach(s => {
+        if (!seen.has(s.name)) { seen.add(s.name); all.push(s) }
+      })
+      await new Promise(r => setTimeout(r, 200))
     }
 
-    // iw_title_text 방식도 병행 (테이블 구조가 다를 경우 대비)
-    if (stores.length < 10) {
-      const blockRe = /class="iw_title_text"[^>]*>([\s\S]*?)<\/[\s\S]*?(\d+)\s*회/g
-      let m
-      while ((m = blockRe.exec(html)) !== null) {
-        const name = m[1].replace(/<[^>]+>/g, '').trim()
-        const wins = parseInt(m[2])
-        if (name && !seen.has(name)) {
-          seen.add(name)
-          stores.push({ name, wins, addr: '', region: '' })
-        }
-      }
+    all.sort((a, b) => b.wins - a.wins)
+
+    if (all.length < 5) {
+      // 파싱 실패 시 디버그
+      const r2 = await fetch('https://lotto.agptedu.com/lotto-area-search/?addr=서울', { headers: HEADERS })
+      const html = await r2.text()
+      const idx = html.indexOf('shop-name')
+      return res.status(200).json({ totalCount: 0, data: [], debug: html.slice(Math.max(0,idx-50), idx+300) })
     }
 
-    stores.sort((a, b) => b.wins - a.wins)
-
-    // 파싱 결과가 너무 적으면 디버그 정보 포함
-    if (stores.length < 5) {
-      const snippet = html.slice(html.indexOf('shop-name') - 100, html.indexOf('shop-name') + 500)
-      return res.status(200).json({ totalCount: stores.length, data: stores, debug: snippet })
-    }
-
-    return res.status(200).json({ totalCount: stores.length, data: stores })
+    return res.status(200).json({ totalCount: all.length, data: all })
   } catch (e) {
     return res.status(500).json({ error: e.message })
   }
