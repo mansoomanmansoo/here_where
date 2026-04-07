@@ -1,4 +1,4 @@
-// 일회성 명당 데이터 수집 → Supabase 저장
+// 명당 데이터 수집 → Supabase 저장
 // 호출: /api/admin-collect?secret=luck2024
 export const config = { regions: ['icn1'], maxDuration: 60 }
 
@@ -20,19 +20,20 @@ async function fetchRegion(region) {
   const stores = []
   const seen = new Set()
 
-  // lotto-tbl 테이블에서 shop-name + win-count 파싱
   const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
   let m
   while ((m = rowRe.exec(html)) !== null) {
     const row = m[1]
-    const nameM = row.match(/class="shop-name"[^>]*>([\s\S]*?)<\/span>/)
-    const winsM = row.match(/class="win-count"[^>]*>(\d+)/)
+    const nameM = row.match(/<span class="shop-name">([\s\S]*?)<\/span>/)
+    const winsM = row.match(/<span class="win-count">(\d+)<\/span>/)
+    const addrM = row.match(/moveToMap\('([^']+)'\)/)
     if (!nameM || !winsM) continue
     const name = nameM[1].replace(/<[^>]+>/g, '').trim()
     const wins = parseInt(winsM[1])
+    const addr = addrM ? addrM[1].trim() : ''
     if (!name || seen.has(name)) continue
     seen.add(name)
-    stores.push({ name, wins, addr: '', region, drw_no: null })
+    stores.push({ name, wins, addr, region })
   }
   return stores
 }
@@ -57,16 +58,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // 중복 제거
+  // 중복 제거 (이름 기준)
   const seen = new Set()
   const unique = all.filter(s => {
-    const key = s.addr || s.name
-    if (!key || seen.has(key)) return false
-    seen.add(key)
+    if (!s.name || seen.has(s.name)) return false
+    seen.add(s.name)
     return true
   })
 
-  // 기존 삭제 후 재삽입
+  // 기존 전체 삭제 후 재삽입
   await supabase.from('winner_stores').delete().neq('id', 0)
 
   let inserted = 0
